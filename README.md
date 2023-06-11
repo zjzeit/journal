@@ -1,6 +1,8 @@
 # journal
 This is a $\LaTeX$ template for a personal journal. It was inspired by the [Personal Journal Overleaf Latex template](https://www.overleaf.com/latex/templates/personal-journal-template/cnhkpjpfkrdn). See the [build output](build/main.pdf) for an example rendering of the journal format.
 
+![layout](sample.png)
+
 ## Resources
 The repository contains two categories of files:
 
