@@ -1,0 +1,202 @@
+% Chapter titles correspond to new months.
+% Section titles correspond to Journal entry dates.
+% Subsection titles correspond to optional Journal entry titles.
+
+
+% Preamble
+\documentclass[12pt]{report}
+\usepackage{pgffor} % Allows the foreach command.
+\usepackage{xstring}
+\usepackage{datetime} % For converting date names
+\usepackage[tmargin=.75in,bmargin=1in]{geometry}
+\usepackage{hyperref}  % For hyperlinks in the Table of Contents
+\usepackage{lipsum}
+\usepackage{expl3} % For regex matching
+\usepackage{fancyhdr} % For custom header/footer
+\usepackage{titlesec} % For format and spacing of chapter and section titles
+\usepackage{indentfirst} % For indenting the first sentence in a paragraph. 
+
+% Set the indent amount of the first sentence in a paragraph.
+\setlength{\parindent}{25pt} 
+
+% Set the format and spacing of chapter and section titles. This requires the titlesec package
+\titleformat{\chapter}[display]
+  {}{\Large\scshape\chaptertitlename\ \thechapter\\*[-15pt]\hrulefill}{-13pt}{\LARGE\bfseries}[\vspace{-25pt}]
+\titleformat{\section}[display]
+  {}{\Large\scshape\partname\ \thepart\\*[-15pt]\hrulefill}{-13pt}{\large\bfseries}[\vspace{0pt}]
+\titleformat{\subsection}[display]
+  {}{\Large\scshape\partname\ \thepart\\*[-15pt]\hrulefill}{-13pt}{\normalsize\bfseries}[\vspace{0pt}]
+\titlespacing*{\chapter}
+  {0pt}{10pt}{40pt}
+\titlespacing*{\section}
+  {0pt}{0pt}{5pt}
+\titlespacing*{\subsection}
+  {0pt}{0pt}{0pt}
+
+% Create a reusable newread stream called filereadstream (there is a limit to the number of these).
+% This is used when reading a Journal entry line-by-line.
+\newread\filereadstream
+
+% Enable hyperlinks for the Table of Contents.
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+% Set global counters for the year and month that hav been printed. This is used to create year pages. It also helps for identifying first-of-month entries.
+\global\let\currentyear=0
+\global\let\currentmonth=0
+\global\let\ENTRYMONTH=0
+\global\let\ENTRYYEAR=0
+
+% Header / Footer
+\fancypagestyle{plain}{
+  \fancyhf{}% Clear default header/footer
+  \fancyhead[R]{\leftmark}% Right header. I update the "leftmark" manually using calls to "\markboth" in the document.
+  \fancyfoot[R]{\thepage}% Right footer
+}
+
+% Set default page style to plain, which has associated headers and footers (as defined previously by \fancypagestyle).
+\pagestyle{plain}
+
+% import index.tex which creates the variable \fileindex
+% This index file is generated separately via an external script (and not natively through LaTeX).
+% The script is "closejournal.sh" and is executed when I finish adding a new entry in the journal.
+\input{index}
+
+\begin{document}
+
+% Title page: import from title.tex
+\input{title}
+
+% Table of Contents
+\tableofcontents
+\thispagestyle{empty}
+
+% for loop. "\file" is the variable. "\fileindex" is the source list.
+\foreach \filepath in \fileindex {
+
+	% Define date variables
+	\StrMid{\filepath}{14}{17}[\ENTRYYEAR]
+	\StrMid{\filepath}{19}{20}[\ENTRYMONTH]
+	\StrMid{\filepath}{22}{23}[\ENTRYDAY]
+	\def\DAYOFWEEK{\dayofweekname{\ENTRYDAY}{\ENTRYMONTH}{\ENTRYYEAR}}
+
+	% Check if this is the first entry for the year:
+	\IfStrEq{\ENTRYYEAR}{\currentyear}{
+		% This is not the first entry for the year.
+
+		% Check if this is the first entry for the month:
+		\IfStrEq{\ENTRYMONTH}{\currentmonth}{}{
+
+			\phantomsection
+			% This is the first entry for the month, so add a month chapter. This line does not add it to the TOC.
+			% Because of the "*", we need to tell LaTeX where the section anchor is, so we place a phantomsection just before this line.
+			\chapter*{\monthname[\ENTRYMONTH],\hphantom{ }\ENTRYYEAR}
+
+			% This is the first entry for the month. Add month to Table of Content
+			\addcontentsline{toc}{section}{\ENTRYMONTH \hphantom{ } \monthname[\ENTRYMONTH]}
+
+			% Set the global currentmonth variable to track which entry months we have published.
+			\global\let\currentmonth=\ENTRYMONTH
+		}
+
+		% Journal entry date
+		\section*{\textit{\DAYOFWEEK, \ENTRYDAY\hphantom{ }\monthname[\ENTRYMONTH]\hphantom{ }\ENTRYYEAR}}
+
+		% Set the header for the page. This corresponds with the fancyhead call in the preamble. The location of this is important.
+		% If you modify this, you should also change the other call to \markboth. I kept the month numerical as it is easier to scroll through
+		% and find the desired date.
+		\markboth{\ENTRYMONTH\hphantom{ }-\hphantom{ }\ENTRYYEAR}{Aim of this Thesis}
+
+		% Print the journal entry content
+		% Use the newread stream (filereadstream is defined in the preamble). For leach line in the journal entry, check if "::title::" exists.
+		\openin\filereadstream=\filepath
+		\loop\unless\ifeof\filereadstream
+			\read\filereadstream to \fileline % Reads a line of the file into \fileline
+			\IfSubStr{\fileline}{::title::}{
+				% The line in this journal entry contains "::title::" so parse it.
+				\StrMid{\fileline}{11}{99}[\ENTRYTITLE]
+				\phantomsection
+				% Create the optional boldface title just above the journal entry content.
+				\subsection*{\ENTRYTITLE}
+				%  Add the title to the Table of Contents.
+				\addcontentsline{toc}{subsection}{\ENTRYTITLE}
+			}{
+				% The current line in this journal entry does not contain "::title::" so simply print the line.
+				% Check if the line is empty. If it is, print nothing. Else print the line.
+				\setbox0=\hbox{\fileline\unskip}\ifdim\wd0=0pt
+				% Pring nothing here, as the content from the file was an empty line. This prevents extra space at the end of each Journal entry.
+				% It also prevents multiple spaces between paragraphs in the journal entry from rendering.
+				{}
+				\else
+					% I add a newline (which requires some text before it, so I added an empty hphantom).
+					\fileline \hphantom{}\newline
+				\fi
+
+			}
+		\repeat
+		\closein\filereadstream
+	}{
+		% This is the first entry for the year, so create a new year page.
+		% Add empty page with just the year on it. The newyear.tex contains a \phantomsection for anchoring links.
+		\input{newyear}
+
+		% Set the header for the page. This corresponds with the fancyhead call in the preamble.
+		\markboth{\ENTRYMONTH\hphantom{ }-\hphantom{ }\ENTRYYEAR}{}
+
+		% Add new year to Table of Contents
+		\addcontentsline{toc}{chapter}{\ENTRYYEAR}
+
+		% Because of the "*" in \chapter*, we need to tell LaTeX where the section anchor is, so we place a phantomsection.
+		\phantomsection
+		% This is the first entry for the month (automatically, because it's also the first entry for the year), so add a month chapter. 
+		% This line does not add it to the TOC due to the "*". 
+		\chapter*{\monthname[\ENTRYMONTH],\hphantom{ }\ENTRYYEAR}
+
+		% This is the first entry for the month. Add month to Table of Content
+		\addcontentsline{toc}{section}{\ENTRYMONTH \hphantom{ } \monthname[\ENTRYMONTH]}
+
+		% Journal entry date. Use of the "*" prevents adding the numbered section to the table of contents.
+		\section*{\textit{\DAYOFWEEK, \ENTRYDAY\hphantom{ }\monthname[\ENTRYMONTH]\hphantom{ }\ENTRYYEAR}}
+
+		% Print the journal entry content
+		% Use the newread stream (filereadstream is defined in the preamble). For leach line in the journal entry, check if "::title::" exists.
+		\openin\filereadstream=\filepath
+		\loop\unless\ifeof\filereadstream
+			\read\filereadstream to \fileline % Reads a line of the file into \fileline
+			\IfSubStr{\fileline}{::title::}{
+				% The line in this journal entry contains "::title::" so parse it.
+				\StrMid{\fileline}{11}{99}[\ENTRYTITLE]
+				\phantomsection
+				% Create the optional boldface title just above the journal entry content.
+				\subsection*{\ENTRYTITLE}
+				%  Add the title to the Table of Contents.
+				\addcontentsline{toc}{subsection}{\ENTRYTITLE}
+			}{
+				% The current line in this journal entry does not contain "::title::" so simply print the line.
+				% Check if the line is empty. If it is, print nothing. Else print the line.
+				\setbox0=\hbox{\fileline\unskip}\ifdim\wd0=0pt
+				% Pring nothing here, as the content from the file was an empty line. This prevents extra space at the end of each Journal entry.
+				% It also prevents multiple spaces between paragraphs in the journal entry from rendering.
+				{} 
+				\else
+					% I add a newline (which requires some text before it, so I added an empty hphantom).
+					\fileline \hphantom{}\newline
+				\fi
+
+			}
+		\repeat
+		\closein\filereadstream
+
+		% Set the global currentyear variable to track which entry years we have published.
+		\global\let\currentyear=\ENTRYYEAR
+		% Set the global currentmonth variable to track which entry months we have published.
+		\global\let\currentmonth=\ENTRYMONTH
+	}
+}
+
+\end{document}
