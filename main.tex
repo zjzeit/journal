@@ -1,17 +1,16 @@
 % Chapter titles correspond to new months.
 % Section titles correspond to Journal entry dates.
 % Subsection titles correspond to optional Journal entry titles.
-
+% Note: journal entry files must not contain LaTeX operations. Symbols must be escaped.
 
 % Preamble
 \documentclass[12pt]{report}
 \usepackage{pgffor} % Allows the foreach command.
-\usepackage{xstring}
+\usepackage{xstring} % For string manipulation (StrMid)
 \usepackage{datetime} % For converting date names
 \usepackage[tmargin=.75in,bmargin=1in]{geometry}
 \usepackage{hyperref}  % For hyperlinks in the Table of Contents
 \usepackage{lipsum}
-\usepackage{expl3} % For regex matching
 \usepackage{fancyhdr} % For custom header/footer
 \usepackage{titlesec} % For format and spacing of chapter and section titles
 \usepackage{indentfirst} % For indenting the first sentence in a paragraph. 
@@ -29,9 +28,47 @@
 \titlespacing*{\chapter}
   {0pt}{10pt}{40pt}
 \titlespacing*{\section}
-  {0pt}{0pt}{5pt}
+  {0pt}{10pt}{5pt}
 \titlespacing*{\subsection}
   {0pt}{0pt}{0pt}
+  
+% Create a command ``\escapedinput'' to automatically escape TeX special characters for journal entry files.
+% This is similar to \verbatiminput, only below I can control which characters to escape.
+% I chose not to escape ``\ { }'' so that I can insert a title in a Journal entry.
+% https://tex.stackexchange.com/a/471430/298701
+\protected\def\redefinecharacter#1#2
+{
+	\catcode`#1=13 % https://en.wikibooks.org/wiki/TeX/catcode
+	\begingroup
+	\lccode`\~=`#1
+	\lowercase{\endgroup\def~{#2}}
+}
+\protected\def\escapedinput#1
+{
+	\begingroup
+	%\redefinecharacter{\\}{\textbackslash}
+	%\redefinecharacter{\{}{\{}
+	%\redefinecharacter{\}}{\}}
+	\redefinecharacter{\$}{\$}
+	\redefinecharacter{\&}{\&}
+	\redefinecharacter{\#}{\#}
+	\redefinecharacter{\^}{\^{}}
+	\redefinecharacter{\_}{\_}
+	\redefinecharacter{\%}{\%}
+	\redefinecharacter{\~}{\textasciitilde}
+	\input{#1}
+	\endgroup
+}
+
+% Create a command ``\entrytitle'' to handle journal entry titles.
+\newcommand{\entrytitle}[1]{
+	% Mark a phantom section so that the table of contents links to the exact subsection.
+	\phantomsection
+	% Create the optional boldface title just above the journal entry content.
+	\subsection*{#1}
+	%  Add the title to the Table of Contents.
+	\addcontentsline{toc}{subsection}{#1}
+}
 
 % Create a reusable newread stream called filereadstream (there is a limit to the number of these).
 % This is used when reading a Journal entry line-by-line.
@@ -88,59 +125,8 @@
 	% Check if this is the first entry for the year:
 	\IfStrEq{\ENTRYYEAR}{\currentyear}{
 		% This is not the first entry for the year.
-
-		% Check if this is the first entry for the month:
-		\IfStrEq{\ENTRYMONTH}{\currentmonth}{}{
-
-			\phantomsection
-			% This is the first entry for the month, so add a month chapter. This line does not add it to the TOC.
-			% Because of the "*", we need to tell LaTeX where the section anchor is, so we place a phantomsection just before this line.
-			\chapter*{\monthname[\ENTRYMONTH],\hphantom{ }\ENTRYYEAR}
-
-			% This is the first entry for the month. Add month to Table of Content
-			\addcontentsline{toc}{section}{\ENTRYMONTH \hphantom{ } \monthname[\ENTRYMONTH]}
-
-			% Set the global currentmonth variable to track which entry months we have published.
-			\global\let\currentmonth=\ENTRYMONTH
-		}
-
-		% Journal entry date
-		\section*{\textit{\DAYOFWEEK, \ENTRYDAY\hphantom{ }\monthname[\ENTRYMONTH]\hphantom{ }\ENTRYYEAR}}
-
-		% Set the header for the page. This corresponds with the fancyhead call in the preamble. The location of this is important.
-		% If you modify this, you should also change the other call to \markboth. I kept the month numerical as it is easier to scroll through
-		% and find the desired date.
-		\markboth{\ENTRYMONTH\hphantom{ }-\hphantom{ }\ENTRYYEAR}{Aim of this Thesis}
-
-		% Print the journal entry content
-		% Use the newread stream (filereadstream is defined in the preamble). For leach line in the journal entry, check if "::title::" exists.
-		\openin\filereadstream=\filepath
-		\loop\unless\ifeof\filereadstream
-			\read\filereadstream to \fileline % Reads a line of the file into \fileline
-			\IfSubStr{\fileline}{::title::}{
-				% The line in this journal entry contains "::title::" so parse it.
-				\StrMid{\fileline}{11}{99}[\ENTRYTITLE]
-				\phantomsection
-				% Create the optional boldface title just above the journal entry content.
-				\subsection*{\ENTRYTITLE}
-				%  Add the title to the Table of Contents.
-				\addcontentsline{toc}{subsection}{\ENTRYTITLE}
-			}{
-				% The current line in this journal entry does not contain "::title::" so simply print the line.
-				% Check if the line is empty. If it is, print nothing. Else print the line.
-				\setbox0=\hbox{\fileline\unskip}\ifdim\wd0=0pt
-				% Pring nothing here, as the content from the file was an empty line. This prevents extra space at the end of each Journal entry.
-				% It also prevents multiple spaces between paragraphs in the journal entry from rendering.
-				{}
-				\else
-					% I add a newline (which requires some text before it, so I added an empty hphantom).
-					\fileline \hphantom{}\newline
-				\fi
-
-			}
-		\repeat
-		\closein\filereadstream
-	}{
+	}
+	{
 		% This is the first entry for the year, so create a new year page.
 		% Add empty page with just the year on it. The newyear.tex contains a \phantomsection for anchoring links.
 		\input{newyear}
@@ -150,53 +136,44 @@
 
 		% Add new year to Table of Contents
 		\addcontentsline{toc}{chapter}{\ENTRYYEAR}
+		% Reset currentmonth back to zero. 
+		% This fixes an example edge case: If my last journal entry was May 2020, and the very next journal entry is May 2021
+		% then the check for whether this is the first entry of the month will not work properly.
+		\global\let\currentmonth=0
+	}
 
-		% Because of the "*" in \chapter*, we need to tell LaTeX where the section anchor is, so we place a phantomsection.
+	% Check if this is the first entry for the month:
+	\IfStrEq{\ENTRYMONTH}{\currentmonth}{}{
+
 		\phantomsection
-		% This is the first entry for the month (automatically, because it's also the first entry for the year), so add a month chapter. 
-		% This line does not add it to the TOC due to the "*". 
+		% This is the first entry for the month, so add a month chapter. This line does not add it to the TOC.
+		% Because of the "*", we need to tell LaTeX where the section anchor is, so we place a phantomsection just before this line.
 		\chapter*{\monthname[\ENTRYMONTH],\hphantom{ }\ENTRYYEAR}
 
 		% This is the first entry for the month. Add month to Table of Content
 		\addcontentsline{toc}{section}{\ENTRYMONTH \hphantom{ } \monthname[\ENTRYMONTH]}
 
-		% Journal entry date. Use of the "*" prevents adding the numbered section to the table of contents.
-		\section*{\textit{\DAYOFWEEK, \ENTRYDAY\hphantom{ }\monthname[\ENTRYMONTH]\hphantom{ }\ENTRYYEAR}}
-
-		% Print the journal entry content
-		% Use the newread stream (filereadstream is defined in the preamble). For leach line in the journal entry, check if "::title::" exists.
-		\openin\filereadstream=\filepath
-		\loop\unless\ifeof\filereadstream
-			\read\filereadstream to \fileline % Reads a line of the file into \fileline
-			\IfSubStr{\fileline}{::title::}{
-				% The line in this journal entry contains "::title::" so parse it.
-				\StrMid{\fileline}{11}{99}[\ENTRYTITLE]
-				\phantomsection
-				% Create the optional boldface title just above the journal entry content.
-				\subsection*{\ENTRYTITLE}
-				%  Add the title to the Table of Contents.
-				\addcontentsline{toc}{subsection}{\ENTRYTITLE}
-			}{
-				% The current line in this journal entry does not contain "::title::" so simply print the line.
-				% Check if the line is empty. If it is, print nothing. Else print the line.
-				\setbox0=\hbox{\fileline\unskip}\ifdim\wd0=0pt
-				% Pring nothing here, as the content from the file was an empty line. This prevents extra space at the end of each Journal entry.
-				% It also prevents multiple spaces between paragraphs in the journal entry from rendering.
-				{} 
-				\else
-					% I add a newline (which requires some text before it, so I added an empty hphantom).
-					\fileline \hphantom{}\newline
-				\fi
-
-			}
-		\repeat
-		\closein\filereadstream
-
-		% Set the global currentyear variable to track which entry years we have published.
-		\global\let\currentyear=\ENTRYYEAR
 		% Set the global currentmonth variable to track which entry months we have published.
 		\global\let\currentmonth=\ENTRYMONTH
 	}
+
+	% Journal entry date. Use of the "*" prevents adding the numbered section to the table of contents.
+	\section*{\textit{\DAYOFWEEK, \ENTRYDAY\hphantom{ }\monthname[\ENTRYMONTH]\hphantom{ }\ENTRYYEAR}}
+
+	% Set the header for the page. This corresponds with the fancyhead call in the preamble. The location of this is important.
+	% If you modify this, you should also change the other call to \markboth. I kept the month numerical as it is easier to scroll
+	% and find the desired date.
+	\markboth{\ENTRYMONTH\hphantom{ }-\hphantom{ }\ENTRYYEAR}{Aim of this Thesis}
+
+	% Print the journal entry content as raw input (escaping most TeX control sequences except \ { }.
+	% We allow ``\ {  }'' to enable us to define an optional title.
+	\escapedinput{\filepath}
+
+	% Set the global currentyear variable to track which entry years we have published.
+	\global\let\currentyear=\ENTRYYEAR
+	% Set the global currentmonth variable to track which entry months we have published.
+	\global\let\currentmonth=\ENTRYMONTH
+
 }
 
 \end{document}
