@@ -1,0 +1,90 @@
+% Preamble
+\usepackage{pgffor} % Allows the foreach command.
+\usepackage{xstring} % For string manipulation (StrMid)
+\usepackage{datetime} % For converting date names
+\usepackage[tmargin=.75in,bmargin=1in]{geometry}
+\usepackage{hyperref}  % For hyperlinks in the Table of Contents
+\usepackage{lipsum}
+\usepackage{fancyhdr} % For custom header/footer
+\usepackage{titlesec} % For format and spacing of chapter and section titles
+\usepackage{indentfirst} % For indenting the first sentence in a paragraph. 
+
+% Set the indent amount of the first sentence in a paragraph.
+\setlength{\parindent}{25pt} 
+
+% Set the format and spacing of chapter and section titles. This requires the titlesec package
+\titleformat{\chapter}[display]
+  {}{\Large\scshape\chaptertitlename\ \thechapter\\*[-15pt]\hrulefill}{-13pt}{\LARGE\bfseries}[\vspace{-25pt}]
+\titleformat{\section}[display]
+  {}{\Large\scshape\partname\ \thepart\\*[-15pt]\hrulefill}{-13pt}{\large\bfseries}[\vspace{0pt}]
+\titleformat{\subsection}[display]
+  {}{\Large\scshape\partname\ \thepart\\*[-15pt]\hrulefill}{-13pt}{\normalsize\bfseries}[\vspace{0pt}]
+\titlespacing*{\chapter}
+  {0pt}{10pt}{40pt}
+\titlespacing*{\section}
+  {0pt}{10pt}{5pt}
+\titlespacing*{\subsection}
+  {0pt}{0pt}{0pt}
+  
+% Create a command ``\escapedinput'' to automatically escape TeX special characters for journal entry files.
+% This is similar to \verbatiminput, only below I can control which characters to escape.
+% I chose not to escape ``\ { }'' so that I can insert a title in a Journal entry.
+% https://tex.stackexchange.com/a/471430/298701
+\protected\def\redefinecharacter#1#2
+{
+	\catcode`#1=13 % https://en.wikibooks.org/wiki/TeX/catcode
+	\begingroup
+	\lccode`\~=`#1
+	\lowercase{\endgroup\def~{#2}}
+}
+\protected\def\escapedinput#1
+{
+	\begingroup
+	%\redefinecharacter{\\}{\textbackslash}
+	%\redefinecharacter{\{}{\{}
+	%\redefinecharacter{\}}{\}}
+	\redefinecharacter{\$}{\$}
+	\redefinecharacter{\&}{\&}
+	\redefinecharacter{\#}{\#}
+	\redefinecharacter{\^}{\^{}}
+	\redefinecharacter{\_}{\_}
+	\redefinecharacter{\%}{\%}
+	\redefinecharacter{\~}{\textasciitilde}
+	\input{#1}
+	\endgroup
+}
+
+% Create a command ``\entrytitle'' to handle journal entry titles.
+\newcommand{\entrytitle}[1]{
+	% Mark a phantom section so that the table of contents links to the exact subsection.
+	\phantomsection
+	% Create the optional boldface title just above the journal entry content.
+	\subsection*{#1}
+	%  Add the title to the Table of Contents.
+	\addcontentsline{toc}{subsection}{#1}
+}
+
+% Enable hyperlinks for the Table of Contents.
+\hypersetup{
+    colorlinks,
+    citecolor=black,
+    filecolor=black,
+    linkcolor=black,
+    urlcolor=black
+}
+
+% Set global counters for the year and month that hav been printed. This is used to create year pages. It also helps for identifying first-of-month entries.
+\global\let\currentyear=0
+\global\let\currentmonth=0
+\global\let\ENTRYMONTH=0
+\global\let\ENTRYYEAR=0
+
+% Header / Footer
+\fancypagestyle{plain}{
+  \fancyhf{}% Clear default header/footer
+  \fancyhead[R]{\leftmark}% Right header. I update the "leftmark" manually using calls to "\markboth" in the document.
+  \fancyfoot[R]{\thepage}% Right footer
+}
+
+% Set default page style to plain, which has associated headers and footers (as defined previously by \fancypagestyle).
+\pagestyle{plain}
